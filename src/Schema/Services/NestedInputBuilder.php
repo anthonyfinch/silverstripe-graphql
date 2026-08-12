@@ -122,7 +122,7 @@ class NestedInputBuilder
                 continue;
             }
             $namedType = $fieldObj->getNamedType();
-            $nestedType = $this->schema->getCanonicalType($namedType);
+            $nestedType = $this->getCanonicalNestedType($namedType);
             if ($nestedType) {
                 $seen = $this->schema->getState()->get([
                   static::class,
@@ -211,7 +211,7 @@ class NestedInputBuilder
             }
 
             $fieldType = $fieldObj->getNamedType();
-            $nestedType = $this->schema->getCanonicalType($fieldType);
+            $nestedType = $this->getCanonicalNestedType($fieldType);
 
             $isScalar = (bool) Schema::isInternalType($fieldType) || $this->schema->getEnum($fieldType);
 
@@ -363,6 +363,29 @@ class NestedInputBuilder
         }
 
         return $fieldName;
+    }
+
+    /**
+     * Resolve a type name to the type nested inputs should be built against.
+     * A paginated field's type may already have been rewritten by paginateList
+     * from `[Node]` to `NodeConnection`; the connection wrapper has no model
+     * fields, so unwrap it to its canonical node type. Without this, the
+     * shape of nested inputs depends on whether pagination has run yet --
+     * i.e. on schema component processing order.
+     */
+    private function getCanonicalNestedType(string $typeName): ?Type
+    {
+        $type = $this->schema->getCanonicalType($typeName);
+        if ($type && !$type instanceof ModelType) {
+            $nodesField = $type->getFieldByName('nodes');
+            if ($nodesField) {
+                $nodeType = $this->schema->getCanonicalType($nodesField->getNamedType());
+                if ($nodeType) {
+                    return $nodeType;
+                }
+            }
+        }
+        return $type;
     }
 
     /**
